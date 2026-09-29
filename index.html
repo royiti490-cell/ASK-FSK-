@@ -1,0 +1,351 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASK & BFSK Digital Communications Demonstrator</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for BER & Orthogonality plots -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- KaTeX for rendering LaTeX math formulas -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-group">
+                <div class="logo-icon">📡</div>
+                <div>
+                    <h1>ASK & BFSK Telecom Suite</h1>
+                    <p class="subtitle">Coherent Correlator vs. Noncoherent Detector & Orthogonality Simulator</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-cyan">ASK / OOK</span>
+                <span class="badge badge-magenta">BFSK</span>
+                <span class="badge badge-gold">AWGN Channel</span>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="main-layout">
+            <!-- Sidebar Controls -->
+            <aside class="sidebar-panel">
+                <div class="panel-header">
+                    <h2>⚙️ System Controls</h2>
+                </div>
+
+                <!-- Modulation Type -->
+                <div class="control-group">
+                    <label class="control-label">Modulation Scheme</label>
+                    <div class="radio-toggle">
+                        <button class="toggle-btn active" id="btn-mod-ask" onclick="setModulation('ASK')">ASK (OOK)</button>
+                        <button class="toggle-btn" id="btn-mod-bfsk" onclick="setModulation('BFSK')">BFSK</button>
+                    </div>
+                </div>
+
+                <!-- Bit Stream Selector -->
+                <div class="control-group">
+                    <label class="control-label" for="bit-input">Binary Sequence</label>
+                    <input type="text" id="bit-input" class="text-input" value="1, 0, 1, 1, 0, 1, 0, 0" placeholder="e.g. 1,0,1,1,0">
+                    <div class="preset-btn-row">
+                        <button class="preset-btn" onclick="setBitPreset('default')">Default</button>
+                        <button class="preset-btn" onclick="setBitPreset('alt')">01010101</button>
+                        <button class="preset-btn" onclick="setBitPreset('random')">Random 8-bit</button>
+                    </div>
+                </div>
+
+                <!-- Carrier & Timing -->
+                <div class="control-group">
+                    <div class="slider-header">
+                        <span>Symbol Rate (\(R_b\))</span>
+                        <span class="val-display" id="val-rb">100 Baud (10 ms)</span>
+                    </div>
+                    <input type="range" id="slider-rb" min="50" max="200" step="10" value="100" oninput="updateParams()">
+                </div>
+
+                <div class="control-group">
+                    <div class="slider-header">
+                        <span>Carrier Frequency (\(f_c\) / \(f_0\))</span>
+                        <span class="val-display" id="val-fc">1000 Hz</span>
+                    </div>
+                    <input type="range" id="slider-fc" min="500" max="2000" step="100" value="1000" oninput="updateParams()">
+                </div>
+
+                <!-- Tone Spacing (BFSK Only) -->
+                <div class="control-group" id="group-tone-spacing">
+                    <div class="slider-header">
+                        <span>BFSK Tone Spacing (\(\Delta f\))</span>
+                        <span class="val-display val-highlight" id="val-deltaf">1.0 × Rb (100 Hz)</span>
+                    </div>
+                    <input type="range" id="slider-deltaf" min="0.1" max="2.5" step="0.05" value="1.0" oninput="updateParams()">
+                    <div class="ortho-badges">
+                        <button class="mini-badge" onclick="setToneSpacing(0.5)">Coherent Min (0.5 Rb)</button>
+                        <button class="mini-badge" onclick="setToneSpacing(1.0)">Noncoherent Min (1.0 Rb)</button>
+                    </div>
+                </div>
+
+                <!-- Channel Settings -->
+                <div class="panel-divider"></div>
+                <div class="panel-header">
+                    <h2>🌊 Channel Parameters</h2>
+                </div>
+
+                <div class="control-group">
+                    <div class="slider-header">
+                        <span>Channel SNR (\(E_b/N_0\))</span>
+                        <span class="val-display" id="val-snr">15.0 dB</span>
+                    </div>
+                    <input type="range" id="slider-snr" min="-5" max="30" step="0.5" value="15" oninput="updateParams()">
+                </div>
+
+                <div class="control-group">
+                    <div class="slider-header">
+                        <span>Carrier Phase Error (\(\theta\))</span>
+                        <span class="val-display val-warning" id="val-phase">0°</span>
+                    </div>
+                    <input type="range" id="slider-phase" min="0" max="360" step="5" value="0" oninput="updateParams()">
+                    <p class="field-help">Notice how phase error degrades Coherent Correlators but Noncoherent Detectors remain unaffected!</p>
+                </div>
+            </aside>
+
+            <!-- Main Content Tabs -->
+            <main class="content-area">
+                <!-- Navigation Tabs -->
+                <nav class="tab-nav">
+                    <button class="tab-btn active" id="tab-waves" onclick="switchTab('waves')">📈 Waveforms & Correlators</button>
+                    <button class="tab-btn" id="tab-ortho" onclick="switchTab('ortho')">📐 FSK Tone Orthogonality</button>
+                    <button class="tab-btn" id="tab-ber" onclick="switchTab('ber')">📊 BER vs SNR Performance</button>
+                    <button class="tab-btn" id="tab-theory" onclick="switchTab('theory')">📘 Mathematical Proofs</button>
+                </nav>
+
+                <!-- TAB 1: WAVEFORMS & RECEIVERS -->
+                <div class="tab-content active" id="view-waves">
+                    <!-- Status & Metric Summary Bar -->
+                    <div class="metrics-grid">
+                        <div class="metric-card card-cyan">
+                            <div class="metric-title">Transmitted Bits</div>
+                            <div class="metric-value" id="disp-tx-bits">1 0 1 1 0 1 0 0</div>
+                        </div>
+                        <div class="metric-card card-emerald">
+                            <div class="metric-title">Coherent Receiver Bit Decision</div>
+                            <div class="metric-value" id="disp-coh-bits">1 0 1 1 0 1 0 0</div>
+                            <div class="metric-status" id="disp-coh-status">✓ 100% Match (0 errors)</div>
+                        </div>
+                        <div class="metric-card card-magenta">
+                            <div class="metric-title">Noncoherent Detector Bit Decision</div>
+                            <div class="metric-value" id="disp-noncoh-bits">1 0 1 1 0 1 0 0</div>
+                            <div class="metric-status" id="disp-noncoh-status">✓ 100% Match (0 errors)</div>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Visualizers -->
+                    <div class="canvas-card">
+                        <div class="canvas-header">
+                            <h3>1. Transmitted Modulated Signal \(s(t)\)</h3>
+                            <span class="legend-dot dot-cyan">Tx Carrier Wave</span>
+                        </div>
+                        <canvas id="canvas-tx" height="120"></canvas>
+                    </div>
+
+                    <div class="canvas-card">
+                        <div class="canvas-header">
+                            <h3>2. Received Signal \(r(t)\) [AWGN + Phase Offset \(\theta\)]</h3>
+                            <span class="legend-dot dot-amber">Noisy Signal</span>
+                        </div>
+                        <canvas id="canvas-rx" height="120"></canvas>
+                    </div>
+
+                    <div class="canvas-card">
+                        <div class="canvas-header">
+                            <h3>3. Coherent Correlator Integrator Output \(y(t) = \int_0^{T_b} r(\tau)\cos(2\pi f \tau)d\tau\)</h3>
+                            <span class="legend-dot dot-emerald">Coherent Reference Correlation</span>
+                        </div>
+                        <canvas id="canvas-coh" height="140"></canvas>
+                    </div>
+
+                    <div class="canvas-card">
+                        <div class="canvas-header">
+                            <h3>4. Noncoherent Quadrature Detector Envelope Output \(R(t) = \sqrt{I(t)^2 + Q(t)^2}\)</h3>
+                            <span class="legend-dot dot-magenta">Quadrature Envelope Magnitude</span>
+                        </div>
+                        <canvas id="canvas-noncoh" height="140"></canvas>
+                    </div>
+                </div>
+
+                <!-- TAB 2: FSK TONE ORTHOGONALITY -->
+                <div class="tab-content" id="view-ortho">
+                    <div class="info-banner">
+                        <div class="info-icon">💡</div>
+                        <div>
+                            <h4>FSK Tone Orthogonality Condition</h4>
+                            <p>For two FSK tones \(f_0\) and \(f_1\) to be orthogonal, their cross-correlation coefficient \(\rho(\Delta f)\) over one bit period \(T_b\) must equal zero. Notice how coherent correlation requires \(\Delta f \ge 0.5/T_b\), while noncoherent envelope detection requires \(\Delta f \ge 1.0/T_b\)!</p>
+                        </div>
+                    </div>
+
+                    <div class="grid-2col">
+                        <div class="card">
+                            <h3>Cross-Correlation Coefficient \(\rho(\Delta f)\) vs Tone Spacing</h3>
+                            <p class="card-subtitle">Comparison of Coherent (\(\Delta \phi = 0^\circ\)) vs Arbitrary Phase (\(\Delta \phi = 90^\circ\))</p>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-ortho"></canvas>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3>FSK Spectral Tone Separation Inspector</h3>
+                            <p class="card-subtitle">Frequency Spectrum of Tone 0 (\(f_0\)) and Tone 1 (\(f_1\))</p>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-spectrum"></canvas>
+                            </div>
+                            <div class="ortho-summary-box">
+                                <div class="ortho-stat">
+                                    <span class="stat-label">Current Tone Spacing \(\Delta f\):</span>
+                                    <span class="stat-val" id="ortho-disp-df">100.0 Hz (1.00 Rb)</span>
+                                </div>
+                                <div class="ortho-stat">
+                                    <span class="stat-label">Coherent Cross-Correlation (\(\rho_{\text{coh}}\)):</span>
+                                    <span class="stat-val" id="ortho-disp-rhocoh">0.000 (Orthogonal ✓)</span>
+                                </div>
+                                <div class="ortho-stat">
+                                    <span class="stat-label">Noncoherent Cross-Correlation (\(\rho_{\text{noncoh}}\)):</span>
+                                    <span class="stat-val" id="ortho-disp-rhononcoh">0.000 (Orthogonal ✓)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: BER VS SNR -->
+                <div class="tab-content" id="view-ber">
+                    <div class="card">
+                        <h3>Theoretical & Simulated Bit Error Rate (BER) vs \(E_b/N_0\)</h3>
+                        <p class="card-subtitle">Comparing Coherent ASK, Noncoherent ASK, Coherent BFSK, and Noncoherent BFSK performance in AWGN</p>
+                        <div class="chart-wrapper-large">
+                            <canvas id="chart-ber"></canvas>
+                        </div>
+                        <div class="ber-legend-details">
+                            <div class="ber-item"><span class="ber-key key-cyan"></span> <strong>Coherent ASK / OOK:</strong> \(P_e = Q\left(\sqrt{\frac{E_b}{2 N_0}}\right)\)</div>
+                            <div class="ber-item"><span class="ber-key key-gold"></span> <strong>Noncoherent ASK:</strong> Envelope detection Rayleigh / Ricean threshold</div>
+                            <div class="ber-item"><span class="ber-key key-emerald"></span> <strong>Coherent BFSK:</strong> \(P_e = Q\left(\sqrt{\frac{E_b}{N_0}}\right)\)</div>
+                            <div class="ber-item"><span class="ber-key key-magenta"></span> <strong>Noncoherent BFSK:</strong> \(P_e = \frac{1}{2} e^{-E_b / (2 N_0)}\)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: MATHEMATICAL THEORY -->
+                <div class="tab-content" id="view-theory">
+                    <div class="card theory-card">
+                        <h2>📚 Mathematical Theory & Derivation</h2>
+                        
+                        <div class="theory-section">
+                            <h3>1. Amplitude Shift Keying (ASK / OOK)</h3>
+                            <p>In Binary ASK (specifically On-Off Keying or OOK), the transmitted waveform for bit \(b \in \{0, 1\}\) during symbol interval \(0 \le t \le T_b\) is:</p>
+                            <div class="math-box">
+                                \[ s(t) = \begin{cases} A \cos(2\pi f_c t + \phi_0), & \text{if } b = 1 \\ 0, & \text{if } b = 0 \end{cases} \]
+                            </div>
+                            
+                            <h4>Coherent Receiver (Correlator)</h4>
+                            <p>The received signal is multiplied by a locally generated, phase-synchronized reference carrier \(\cos(2\pi f_c t)\) and integrated over the symbol duration \(T_b\):</p>
+                            <div class="math-box">
+                                \[ y = \int_0^{T_b} r(t) \cos(2\pi f_c t) dt \]
+                            </div>
+                            <p>When bit 1 is sent (assuming zero channel phase error), \(y = \int_0^{T_b} A \cos^2(2\pi f_c t) dt = A \frac{T_b}{2}\). When bit 0 is sent, \(y \approx 0\). The optimal decision threshold is \(\gamma = \frac{A T_b}{4}\).</p>
+                            <p><strong>Phase Error Sensitivity:</strong> If the channel introduces a carrier phase mismatch \(\theta\), the correlator output becomes \(y = A \frac{T_b}{2} \cos(\theta)\). If \(\theta = 90^\circ\), the output collapses to 0, causing massive bit errors!</p>
+
+                            <h4>Noncoherent Detector (Quadrature Envelope Detector)</h4>
+                            <p>When carrier phase \(\theta\) is unknown, a noncoherent receiver uses parallel In-phase (\(I\)) and Quadrature (\(Q\)) correlators:</p>
+                            <div class="math-box">
+                                \[ I = \int_0^{T_b} r(t) \cos(2\pi f_c t) dt, \quad Q = \int_0^{T_b} r(t) \sin(2\pi f_c t) dt \]
+                                \[ R = \sqrt{I^2 + Q^2} \]
+                            </div>
+                            <p>Since \(I = A \frac{T_b}{2} \cos\theta\) and \(Q = -A \frac{T_b}{2} \sin\theta\), the envelope magnitude is \(R = A \frac{T_b}{2} \sqrt{\cos^2\theta + \sin^2\theta} = A \frac{T_b}{2}\), which is completely immune to phase error \(\theta\)!</p>
+                        </div>
+
+                        <div class="theory-section">
+                            <h3>2. Binary Frequency Shift Keying (BFSK)</h3>
+                            <p>In BFSK, bits 0 and 1 are mapped to distinct carrier frequencies \(f_0\) and \(f_1\):</p>
+                            <div class="math-box">
+                                \[ s_1(t) = A \cos(2\pi f_1 t + \phi_1), \quad s_0(t) = A \cos(2\pi f_0 t + \phi_0), \quad 0 \le t \le T_b \]
+                            </div>
+
+                            <h4>Coherent Dual Correlator Receiver</h4>
+                            <p>Two correlators match the two frequencies:</p>
+                            <div class="math-box">
+                                \[ y_0 = \int_0^{T_b} r(t) \cos(2\pi f_0 t) dt, \quad y_1 = \int_0^{T_b} r(t) \cos(2\pi f_1 t) dt \]
+                                \[ \text{Decision: Bit 1 if } y_1 > y_0, \text{ else Bit 0} \]
+                            </div>
+
+                            <h4>Noncoherent Dual Quadrature Detector</h4>
+                            <p>Computes envelope magnitudes for both tone branches:</p>
+                            <div class="math-box">
+                                \[ R_0 = \sqrt{I_0^2 + Q_0^2}, \quad R_1 = \sqrt{I_1^2 + Q_1^2} \]
+                                \[ \text{Decision: Bit 1 if } R_1 > R_0, \text{ else Bit 0} \]
+                            </div>
+                        </div>
+
+                        <div class="theory-section highlight-box">
+                            <h3>3. FSK Tone-Spacing Orthogonality Derivation</h3>
+                            <p>The cross-correlation between two FSK tones spaced by \(\Delta f = |f_1 - f_0|\) with arbitrary phase difference \(\Delta \phi = \phi_1 - \phi_0\) over duration \(T_b\) is:</p>
+                            <div class="math-box">
+                                \[ \rho = \frac{1}{T_b} \int_0^{T_b} \cos(2\pi f_1 t + \phi_1) \cos(2\pi f_0 t + \phi_0) dt \]
+                            </div>
+                            <p>Using trig identity \(\cos A \cos B = \frac{1}{2}[\cos(A-B) + \cos(A+B)]\) and ignoring high-frequency carrier terms (\(f_1 + f_0 \gg 1/T_b\)):</p>
+                            <div class="math-box">
+                                \[ \rho \approx \frac{1}{2 T_b} \int_0^{T_b} \cos(2\pi \Delta f t + \Delta \phi) dt \]
+                            </div>
+
+                            <h4>Condition A: Coherent Detection (\(\Delta \phi = 0\))</h4>
+                            <div class="math-box">
+                                \[ \rho_{\text{coh}} = \frac{1}{2 T_b} \int_0^{T_b} \cos(2\pi \Delta f t) dt = \frac{\sin(2\pi \Delta f T_b)}{4\pi \Delta f T_b} = \frac{1}{2} \text{sinc}(2 \Delta f T_b) \]
+                            </div>
+                            <p>For zero cross-correlation (\(\rho_{\text{coh}} = 0\)):</p>
+                            <div class="math-box">
+                                \[ \sin(2\pi \Delta f T_b) = 0 \implies 2\pi \Delta f T_b = k \pi \implies \Delta f = \frac{k}{2 T_b} = \frac{k R_b}{2} \quad (k = 1, 2, 3, \dots) \]
+                            </div>
+                            <p><strong>Minimum Coherent Tone Spacing:</strong> \(\Delta f_{\text{min, coh}} = \frac{1}{2 T_b} = \frac{R_b}{2} = 0.5 R_b\).</p>
+
+                            <h4>Condition B: Noncoherent Detection (Arbitrary Phase \(\Delta \phi\))</h4>
+                            <p>Expanding \(\cos(2\pi \Delta f t + \Delta \phi) = \cos(2\pi \Delta f t)\cos(\Delta \phi) - \sin(2\pi \Delta f t)\sin(\Delta \phi)\):</p>
+                            <p>For orthogonality for <em>all</em> random phase angles \(\Delta \phi\), BOTH the in-phase integral and quadrature integral must equal zero simultaneously:</p>
+                            <div class="math-box">
+                                \[ \text{1. In-Phase Integral: } \int_0^{T_b} \cos(2\pi \Delta f t) dt = 0 \implies 2 \Delta f T_b = k \quad (k \in \mathbb{Z}^+) \]
+                                \[ \text{2. Quadrature Integral: } \int_0^{T_b} \sin(2\pi \Delta f t) dt = \frac{1 - \cos(2\pi \Delta f T_b)}{2\pi \Delta f} = 0 \implies 2\pi \Delta f T_b = 2 m \pi \implies \Delta f T_b = m \]
+                            </div>
+                            <p>The joint condition requires \(\Delta f T_b = m \implies \Delta f = \frac{m}{T_b} = m R_b\) for integer \(m \ge 1\).</p>
+                            <p><strong>Minimum Noncoherent Tone Spacing:</strong> \(\Delta f_{\text{min, noncoh}} = \frac{1}{T_b} = R_b = 1.0 R_b\).</p>
+
+                            <div class="conclusion-summary">
+                                🔑 <strong>Key Takeaway:</strong> Noncoherent FSK requires <strong>double</strong> the frequency tone separation (\(1.0 R_b\)) compared to Coherent FSK (\(0.5 R_b\)) to guarantee zero cross-talk across arbitrary channel phase shifts!
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false}
+                ],
+                throwOnError : false
+            });
+        });
+    </script>
+</body>
+</html>
+<
